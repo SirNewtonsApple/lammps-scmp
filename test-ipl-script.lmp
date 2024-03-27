@@ -1,0 +1,61 @@
+# Setup simulation parameters
+variable T equal 300 # Temperature in Kelvin
+variable P equal 1.0 # Pressure in atm
+variable timestep equal 0.001 # Timestep in picoseconds
+variable steps equal 10000 # Number of simulation steps
+
+# Setup the simulation box and initial random configuration
+units           lj
+dimension       3
+atom_style      sphere
+
+# Define the atoms as spheres with a radius of 0.5
+lattice         fcc 1.43
+region          box block 0 10 0 10 0 10
+create_box      1 box
+create_atoms    1 random 1000 12345 box
+
+# Set the radius of the particles
+set             type 1 diameter 1.0
+set             type 1 mass 1.0
+
+# Dump initial coordinates
+write_dump            all custom initial_config.lammpstrj id mass x y z radius &
+modify format line "%d %26.16e %26.16e %26.16e %26.16e %26.16e"
+
+
+## Define the potential
+#pair_style      lj/cut 2.5
+#pair_coeff      1 1 1.0 1.0 2.5
+
+pair_style      ipl/cut/smooth 12 1.25
+pair_coeff      1 1 1.0 
+
+# Set initial velocities
+velocity        all create $T 12345 dist gaussian
+
+# Calculate forces
+run             0
+
+# Dump forces
+write_dump            all custom force_only.lammpstrj id fx fy fz &
+modify format line "%d %26.16e %26.16e %26.16e"
+
+write_dump            all custom final_config.lammpstrj id mass x y z radius &
+modify format line "%d %26.16e %26.16e %26.16e %26.16e %26.16e"
+
+## Minimization using FIRE algorithm
+#min_style       fire
+#minimize        1.0e-6 1.0e-6 1000 10000
+#
+## Dump final coordinates and forces, and print potential energy
+#compute         pe all pe/atom
+#variable        pe_atom equal c_pe
+#variable        total_pe equal c_pe[1]
+#print           "Total potential energy before dump = ${total_pe}"
+#dump            3 all custom 100 final_config.lammpstrj id type x y z fx fy fz c_pe
+#
+## Run the simulation
+#timestep        $timestep
+#run             $steps
+#
