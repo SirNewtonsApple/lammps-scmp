@@ -56,8 +56,6 @@ void PairIPLCutSmooth::compute(int eflag, int vflag)
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, rtmp, delx, dely, delz, evdwl, sigma, fpair;
   double rcutsq, rsq, r2inv, rosigma2, rosigma4, sigmaorn, forcelj, factor_lj;
-  //double xtmp, ytmp, ztmp, rtmp, delx, dely, delz, evdwl, sigma, sigma6, fpair;
-  //double rcutsq, rsq, r2inv, r6inv, forcelj, factor_lj;
   int *ilist, *jlist, *numneigh, **firstneigh;
 
   evdwl = 0.0;
@@ -119,12 +117,6 @@ void PairIPLCutSmooth::compute(int eflag, int vflag)
           fpair = factor_lj * forcelj * r2inv;
           
 
-          //r2inv = 1.0 / rsq;
-          //r6inv = r2inv * r2inv * r2inv;
-          //sigma6 = powint(sigma, 6);
-          //forcelj = r6inv * 24.0 * epsilon[itype][jtype] * (2.0 * sigma6 * sigma6 * r6inv - sigma6);
-          //fpair = factor_lj * forcelj * r2inv;
-
           f[i][0] += delx * fpair;
           f[i][1] += dely * fpair;
           f[i][2] += delz * fpair;
@@ -136,12 +128,6 @@ void PairIPLCutSmooth::compute(int eflag, int vflag)
 
           if (eflag) {
             evdwl = sigmaorn + c4*rosigma4 + c2*rosigma2+c0;
-            //evdwl = r6inv * 4.0 * epsilon[itype][jtype];
-            //evdwl *= sigma6 * sigma6 * r6inv - sigma6;
-            //if (offset_flag && (rcutsq > 0.0)) {
-            //  double ratio6 = sigma6 / powint(rcutsq, 3);
-            //  evdwl -= 4.0 * epsilon[itype][jtype] * (ratio6 * ratio6 - ratio6);
-            //}
             evdwl *= factor_lj;
           }
 
@@ -208,7 +194,8 @@ void PairIPLCutSmooth::settings(int narg, char **arg)
 
 void PairIPLCutSmooth::coeff(int narg, char **arg)
 {
-  if (narg < 3 || narg > 4) error->all(FLERR, "Incorrect args for pair coefficients");
+  if (narg != 3) error->all(FLERR, "Incorrect args for pair coefficients");
+  //if (narg < 3 || narg > 4) error->all(FLERR, "Incorrect args for pair coefficients");
   if (!allocated) allocate();
 
   int ilo, ihi, jlo, jhi;
@@ -217,7 +204,7 @@ void PairIPLCutSmooth::coeff(int narg, char **arg)
 
   double epsilon_one = utils::numeric(FLERR, arg[2], false, lmp);
   double cut_one = cut_global;
-  if (narg == 4) cut_one = utils::numeric(FLERR, arg[3], false, lmp);
+  //if (narg == 4) cut_one = utils::numeric(FLERR, arg[3], false, lmp);
 
   int count = 0;
   for (int i = ilo; i <= ihi; i++) {
@@ -241,9 +228,9 @@ void PairIPLCutSmooth::init_style()
   Pair::init_style();
 
   if (!atom->radius_flag)
-    error->all(FLERR, "Pair style lj/cut/sphere requires atom attribute radius");
+    error->all(FLERR, "Pair style ipl/cut/smooth requires atom attribute radius");
   if (mix_flag == SIXTHPOWER)
-    error->all(FLERR, "Pair_modify mix sixthpower is not compatible with pair style lj/cut/sphere");
+    error->all(FLERR, "Pair_modify mix sixthpower is not compatible with pair style ipl/cut/smooth");
 
   // determine max radius per type
 
@@ -401,19 +388,10 @@ double PairIPLCutSmooth::single(int i, int j, int itype, int jtype, double rsq,
           + 4.0*c4 * rosigma4
           + 2.0*c2 * rosigma2;
 
-  //sigma6 = powint(sigma, 6);
-  //r2inv = 1.0 / rsq;
-  //r6inv = r2inv * r2inv * r2inv;
-  //forcelj = r6inv * 24.0 * epsilon[itype][jtype] * (sigma6 * sigma6 * r6inv - sigma6);
 
   fforce = factor_lj * forcelj * r2inv;
 
   philj = sigmaorn + c4*rosigma4 + c2*rosigma2+c0;
-  //philj = r6inv * 4.0 * epsilon[itype][jtype] * (sigma6 * sigma6 * r6inv - sigma6);
-  //if (offset_flag && (rcutsq > 0.0)) {
-  //  double ratio6 = sigma6 / powint(rcutsq, 3);
-  //  philj -= 4.0 * epsilon[itype][jtype] * (ratio6 * ratio6 - ratio6);
-  //}
   return factor_lj * philj;
 }
 
