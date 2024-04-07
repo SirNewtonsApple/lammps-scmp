@@ -111,9 +111,9 @@ void PairIPLCutSmooth::compute(int eflag, int vflag)
           rosigma4 = rosigma2*rosigma2;
           sigmaorn = powint(sqrt(1.0/rosigma2), powern);
 
-          forcelj = -1.0*(double)powern*sigmaorn 
-                  + 4.0*c4 * rosigma4
-                  + 2.0*c2 * rosigma2;
+          forcelj = (double)powern*sigmaorn 
+                  - 4.0*c4 * rosigma4
+                  - 2.0*c2 * rosigma2;
           fpair = factor_lj * forcelj * r2inv;
           
 
@@ -384,9 +384,9 @@ double PairIPLCutSmooth::single(int i, int j, int itype, int jtype, double rsq,
   rosigma4 = rosigma2*rosigma2;
   sigmaorn = powint(sqrt(1.0/rosigma2), powern);
 
-  forcelj = -1.0*(double)powern*sigmaorn 
-          + 4.0*c4 * rosigma4
-          + 2.0*c2 * rosigma2;
+  forcelj = (double)powern*sigmaorn 
+          - 4.0*c4 * rosigma4
+          - 2.0*c2 * rosigma2;
 
 
   fforce = factor_lj * forcelj * r2inv;
