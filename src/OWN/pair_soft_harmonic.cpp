@@ -173,9 +173,11 @@ void PairSoftHarmonic::allocate()
 
 void PairSoftHarmonic::settings(int narg, char **arg)
 {
-  if (narg != 1) error->all(FLERR, "Illegal pair_style command");
+  if (narg != 2) error->all(FLERR, "Illegal pair_style command");
 
   alpha = utils::numeric(FLERR, arg[0], false, lmp);
+
+  cut_global = utils::numeric(FLERR, arg[1], false, lmp);
 
   // reset cutoffs that have been explicitly set
 
