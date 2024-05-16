@@ -48,8 +48,7 @@ class PairCoresoftenedCut : public Pair {
   //void compute_outer(int, int) override;
 
  protected:
-  double cut_global;
-  double indk, sigma1;
+  double cut_global, indk, ks1, sigma1;
   double **cut;
   double **epsilon, **sigma;
   //double **lj1, **lj2, **lj3, **lj4, **offset;

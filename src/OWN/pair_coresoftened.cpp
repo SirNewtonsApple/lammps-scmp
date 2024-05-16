@@ -70,7 +70,8 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
 {
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, evdwl, fpair;
-  double rsq, r2inv, r6inv, forcelj, factor_lj;
+  double rsq, r, rk, forcelj, factor_lj;
+  //double rsq, r2inv, r6inv, forcelj, factor_lj;
   int *ilist, *jlist, *numneigh, **firstneigh;
 
   evdwl = 0.0;
@@ -111,24 +112,38 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
       jtype = type[j];
 
       if (rsq < cutsq[itype][jtype]) {
-        r2inv = 1.0 / rsq;
-        r6inv = r2inv * r2inv * r2inv;
-        forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-        fpair = factor_lj * forcelj * r2inv;
+        r14inv = 1.0 / powint(rsq,7);
+        r      = sqrt(rsq);
+        rk     = r * indk;
+        thrks  = tanh(rk - ks1); 
 
-        f[i][0] += delx * fpair;
-        f[i][1] += dely * fpair;
-        f[i][2] += delz * fpair;
-        if (newton_pair || j < nlocal) {
-          f[j][0] -= delx * fpair;
-          f[j][1] -= dely * fpair;
-          f[j][2] -= delz * fpair;
-        }
+        forcelj = 14.0 * r14inv + rk / 2.0 * (1.0 - thrks * thrks);
+        fpair = factor_lj * forcelj * r2inv;
+        //fforce = factor_lj * forcelj * r2inv;
 
         if (eflag) {
-          evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
+          evdwl = r14inv + 0.5 * (1.0 - thrks);
+          //evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
           evdwl *= factor_lj;
         }
+        //r2inv = 1.0 / rsq;
+        //r6inv = r2inv * r2inv * r2inv;
+        //forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
+        //fpair = factor_lj * forcelj * r2inv;
+
+        //f[i][0] += delx * fpair;
+        //f[i][1] += dely * fpair;
+        //f[i][2] += delz * fpair;
+        //if (newton_pair || j < nlocal) {
+        //  f[j][0] -= delx * fpair;
+        //  f[j][1] -= dely * fpair;
+        //  f[j][2] -= delz * fpair;
+        //}
+
+        //if (eflag) {
+        //  evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
+        //  evdwl *= factor_lj;
+        //}
 
         if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
       }
@@ -138,257 +153,6 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
   if (vflag_fdotr) virial_fdotr_compute();
 }
 
-/* ---------------------------------------------------------------------- */
-
-//void PairCoresoftenedCut::compute_inner()
-//{
-//  int i, j, ii, jj, inum, jnum, itype, jtype;
-//  double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
-//  double rsq, r2inv, r6inv, forcelj, factor_lj, rsw;
-//  int *ilist, *jlist, *numneigh, **firstneigh;
-//
-//  double **x = atom->x;
-//  double **f = atom->f;
-//  int *type = atom->type;
-//  int nlocal = atom->nlocal;
-//  double *special_lj = force->special_lj;
-//  int newton_pair = force->newton_pair;
-//
-//  inum = list->inum_inner;
-//  ilist = list->ilist_inner;
-//  numneigh = list->numneigh_inner;
-//  firstneigh = list->firstneigh_inner;
-//
-//  double cut_out_on = cut_respa[0];
-//  double cut_out_off = cut_respa[1];
-//
-//  double cut_out_diff = cut_out_off - cut_out_on;
-//  double cut_out_on_sq = cut_out_on * cut_out_on;
-//  double cut_out_off_sq = cut_out_off * cut_out_off;
-//
-//  // loop over neighbors of my atoms
-//
-//  for (ii = 0; ii < inum; ii++) {
-//    i = ilist[ii];
-//    xtmp = x[i][0];
-//    ytmp = x[i][1];
-//    ztmp = x[i][2];
-//    itype = type[i];
-//    jlist = firstneigh[i];
-//    jnum = numneigh[i];
-//
-//    for (jj = 0; jj < jnum; jj++) {
-//      j = jlist[jj];
-//      factor_lj = special_lj[sbmask(j)];
-//      j &= NEIGHMASK;
-//
-//      delx = xtmp - x[j][0];
-//      dely = ytmp - x[j][1];
-//      delz = ztmp - x[j][2];
-//      rsq = delx * delx + dely * dely + delz * delz;
-//
-//      if (rsq < cut_out_off_sq) {
-//        r2inv = 1.0 / rsq;
-//        r6inv = r2inv * r2inv * r2inv;
-//        jtype = type[j];
-//        forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-//        fpair = factor_lj * forcelj * r2inv;
-//        if (rsq > cut_out_on_sq) {
-//          rsw = (sqrt(rsq) - cut_out_on) / cut_out_diff;
-//          fpair *= 1.0 - rsw * rsw * (3.0 - 2.0 * rsw);
-//        }
-//
-//        f[i][0] += delx * fpair;
-//        f[i][1] += dely * fpair;
-//        f[i][2] += delz * fpair;
-//        if (newton_pair || j < nlocal) {
-//          f[j][0] -= delx * fpair;
-//          f[j][1] -= dely * fpair;
-//          f[j][2] -= delz * fpair;
-//        }
-//      }
-//    }
-//  }
-//}
-//
-///* ---------------------------------------------------------------------- */
-//
-//void PairCoresoftenedCut::compute_middle()
-//{
-//  int i, j, ii, jj, inum, jnum, itype, jtype;
-//  double xtmp, ytmp, ztmp, delx, dely, delz, fpair;
-//  double rsq, r2inv, r6inv, forcelj, factor_lj, rsw;
-//  int *ilist, *jlist, *numneigh, **firstneigh;
-//
-//  double **x = atom->x;
-//  double **f = atom->f;
-//  int *type = atom->type;
-//  int nlocal = atom->nlocal;
-//  double *special_lj = force->special_lj;
-//  int newton_pair = force->newton_pair;
-//
-//  inum = list->inum_middle;
-//  ilist = list->ilist_middle;
-//  numneigh = list->numneigh_middle;
-//  firstneigh = list->firstneigh_middle;
-//
-//  double cut_in_off = cut_respa[0];
-//  double cut_in_on = cut_respa[1];
-//  double cut_out_on = cut_respa[2];
-//  double cut_out_off = cut_respa[3];
-//
-//  double cut_in_diff = cut_in_on - cut_in_off;
-//  double cut_out_diff = cut_out_off - cut_out_on;
-//  double cut_in_off_sq = cut_in_off * cut_in_off;
-//  double cut_in_on_sq = cut_in_on * cut_in_on;
-//  double cut_out_on_sq = cut_out_on * cut_out_on;
-//  double cut_out_off_sq = cut_out_off * cut_out_off;
-//
-//  // loop over neighbors of my atoms
-//
-//  for (ii = 0; ii < inum; ii++) {
-//    i = ilist[ii];
-//    xtmp = x[i][0];
-//    ytmp = x[i][1];
-//    ztmp = x[i][2];
-//    itype = type[i];
-//    jlist = firstneigh[i];
-//    jnum = numneigh[i];
-//
-//    for (jj = 0; jj < jnum; jj++) {
-//      j = jlist[jj];
-//      factor_lj = special_lj[sbmask(j)];
-//      j &= NEIGHMASK;
-//
-//      delx = xtmp - x[j][0];
-//      dely = ytmp - x[j][1];
-//      delz = ztmp - x[j][2];
-//      rsq = delx * delx + dely * dely + delz * delz;
-//
-//      if (rsq < cut_out_off_sq && rsq > cut_in_off_sq) {
-//        r2inv = 1.0 / rsq;
-//        r6inv = r2inv * r2inv * r2inv;
-//        jtype = type[j];
-//        forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-//        fpair = factor_lj * forcelj * r2inv;
-//        if (rsq < cut_in_on_sq) {
-//          rsw = (sqrt(rsq) - cut_in_off) / cut_in_diff;
-//          fpair *= rsw * rsw * (3.0 - 2.0 * rsw);
-//        }
-//        if (rsq > cut_out_on_sq) {
-//          rsw = (sqrt(rsq) - cut_out_on) / cut_out_diff;
-//          fpair *= 1.0 + rsw * rsw * (2.0 * rsw - 3.0);
-//        }
-//
-//        f[i][0] += delx * fpair;
-//        f[i][1] += dely * fpair;
-//        f[i][2] += delz * fpair;
-//        if (newton_pair || j < nlocal) {
-//          f[j][0] -= delx * fpair;
-//          f[j][1] -= dely * fpair;
-//          f[j][2] -= delz * fpair;
-//        }
-//      }
-//    }
-//  }
-//}
-//
-///* ---------------------------------------------------------------------- */
-//
-//void PairCoresoftenedCut::compute_outer(int eflag, int vflag)
-//{
-//  int i, j, ii, jj, inum, jnum, itype, jtype;
-//  double xtmp, ytmp, ztmp, delx, dely, delz, evdwl, fpair;
-//  double rsq, r2inv, r6inv, forcelj, factor_lj, rsw;
-//  int *ilist, *jlist, *numneigh, **firstneigh;
-//
-//  evdwl = 0.0;
-//  ev_init(eflag, vflag);
-//
-//  double **x = atom->x;
-//  double **f = atom->f;
-//  int *type = atom->type;
-//  int nlocal = atom->nlocal;
-//  double *special_lj = force->special_lj;
-//  int newton_pair = force->newton_pair;
-//
-//  inum = list->inum;
-//  ilist = list->ilist;
-//  numneigh = list->numneigh;
-//  firstneigh = list->firstneigh;
-//
-//  double cut_in_off = cut_respa[2];
-//  double cut_in_on = cut_respa[3];
-//
-//  double cut_in_diff = cut_in_on - cut_in_off;
-//  double cut_in_off_sq = cut_in_off * cut_in_off;
-//  double cut_in_on_sq = cut_in_on * cut_in_on;
-//
-//  // loop over neighbors of my atoms
-//
-//  for (ii = 0; ii < inum; ii++) {
-//    i = ilist[ii];
-//    xtmp = x[i][0];
-//    ytmp = x[i][1];
-//    ztmp = x[i][2];
-//    itype = type[i];
-//    jlist = firstneigh[i];
-//    jnum = numneigh[i];
-//
-//    for (jj = 0; jj < jnum; jj++) {
-//      j = jlist[jj];
-//      factor_lj = special_lj[sbmask(j)];
-//      j &= NEIGHMASK;
-//
-//      delx = xtmp - x[j][0];
-//      dely = ytmp - x[j][1];
-//      delz = ztmp - x[j][2];
-//      rsq = delx * delx + dely * dely + delz * delz;
-//      jtype = type[j];
-//
-//      if (rsq < cutsq[itype][jtype]) {
-//        if (rsq > cut_in_off_sq) {
-//          r2inv = 1.0 / rsq;
-//          r6inv = r2inv * r2inv * r2inv;
-//          forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-//          fpair = factor_lj * forcelj * r2inv;
-//          if (rsq < cut_in_on_sq) {
-//            rsw = (sqrt(rsq) - cut_in_off) / cut_in_diff;
-//            fpair *= rsw * rsw * (3.0 - 2.0 * rsw);
-//          }
-//
-//          f[i][0] += delx * fpair;
-//          f[i][1] += dely * fpair;
-//          f[i][2] += delz * fpair;
-//          if (newton_pair || j < nlocal) {
-//            f[j][0] -= delx * fpair;
-//            f[j][1] -= dely * fpair;
-//            f[j][2] -= delz * fpair;
-//          }
-//        }
-//
-//        if (eflag) {
-//          r2inv = 1.0 / rsq;
-//          r6inv = r2inv * r2inv * r2inv;
-//          evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
-//          evdwl *= factor_lj;
-//        }
-//
-//        if (vflag) {
-//          if (rsq <= cut_in_off_sq) {
-//            r2inv = 1.0 / rsq;
-//            r6inv = r2inv * r2inv * r2inv;
-//            forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-//            fpair = factor_lj * forcelj * r2inv;
-//          } else if (rsq < cut_in_on_sq)
-//            fpair = factor_lj * forcelj * r2inv;
-//        }
-//
-//        if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
-//      }
-//    }
-//  }
-//}
 
 /* ----------------------------------------------------------------------
    allocate all arrays
@@ -426,6 +190,8 @@ void PairCoresoftenedCut::settings(int narg, char **arg)
   cut_global = utils::numeric(FLERR, arg[0], false, lmp);
   sigma1     = utils::numeric(FLERR, arg[1], false, lmp);
   indk       = utils::numeric(FLERR, arg[2], false, lmp);
+
+  ks1        = indk * sigma1;
 
   // reset cutoffs that have been explicitly set
 
@@ -670,26 +436,18 @@ void PairCoresoftenedCut::write_data_all(FILE *fp)
 double PairCoresoftenedCut::single(int /*i*/, int /*j*/, int itype, int jtype, double rsq,
                          double /*factor_coul*/, double factor_lj, double &fforce)
 {
-  double r14inv, r6inv, forcelj, philj;
+  double r14inv, r, rk, thrks, forcelj, philj;
 
   r14inv = 1.0 / powint(rsq,7);
   r      = sqrt(rsq);
-  tanhkr = tanh(indk*(r - sigma1)); 
+  rk     = r * indk;
+  thrks  = tanh(rk - ks1); 
 
-  forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
+  forcelj = 14.0 * r14inv + rk / 2.0 * (1.0 - thrks * thrks);
   fforce = factor_lj * forcelj * r2inv;
 
-  philj = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
+  philj = r14inv + 0.5 * (1.0 - thrks);
   return factor_lj * philj;
-  //double r2inv, r6inv, forcelj, philj;
-
-  //r2inv = 1.0 / rsq;
-  //r6inv = r2inv * r2inv * r2inv;
-  //forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-  //fforce = factor_lj * forcelj * r2inv;
-
-  //philj = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
-  //return factor_lj * philj;
 }
 
 /* ---------------------------------------------------------------------- */
