@@ -24,15 +24,16 @@
 #include "math_const.h"
 #include "memory.h"
 #include "neigh_list.h"
-#include "neighbor.h"
-#include "respa.h"
-#include "update.h"
+//#include "neighbor.h"
+//#include "respa.h"
+//#include "update.h"
 
 #include <cmath>
 #include <cstring>
 
 using namespace LAMMPS_NS;
-using namespace MathConst;
+using MathSpecial::powint;
+//using namespace MathConst;
 
 /* ---------------------------------------------------------------------- */
 
@@ -111,6 +112,7 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
       rsq = delx * delx + dely * dely + delz * delz;
       jtype = type[j];
 
+      // V(r) = (sigma/r)^14 + 0.5*(1-tanh(k(r-sigma1)))
       if (rsq < cutsq[itype][jtype]) {
         r14inv = 1.0 / powint(rsq,7);
         r      = sqrt(rsq);
@@ -119,13 +121,21 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
 
         forcelj = 14.0 * r14inv + rk / 2.0 * (1.0 - thrks * thrks);
         fpair = factor_lj * forcelj * r2inv;
-        //fforce = factor_lj * forcelj * r2inv;
+
+        f[i][0] += delx * fpair;
+        f[i][1] += dely * fpair;
+        f[i][2] += delz * fpair;
+        if (newton_pair || j < nlocal) {
+          f[j][0] -= delx * fpair;
+          f[j][1] -= dely * fpair;
+          f[j][2] -= delz * fpair;
+        }
 
         if (eflag) {
           evdwl = r14inv + 0.5 * (1.0 - thrks);
-          //evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
           evdwl *= factor_lj;
         }
+
         //r2inv = 1.0 / rsq;
         //r6inv = r2inv * r2inv * r2inv;
         //forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
@@ -185,7 +195,7 @@ void PairCoresoftenedCut::allocate()
 
 void PairCoresoftenedCut::settings(int narg, char **arg)
 {
-  if (narg != 3) error->all(FLERR, "Illegal pair_style command");
+  if (narg != 3) error->all(FLERR, "Illegal pair_style command: cut/sigma1/k");
 
   cut_global = utils::numeric(FLERR, arg[0], false, lmp);
   sigma1     = utils::numeric(FLERR, arg[1], false, lmp);
@@ -244,16 +254,16 @@ void PairCoresoftenedCut::init_style()
 {
   Pair::init_style();
 
-  // request regular or rRESPA neighbor list
+  //// request regular or rRESPA neighbor list
 
-  int list_style = NeighConst::REQ_DEFAULT;
+  //int list_style = NeighConst::REQ_DEFAULT;
 
-  if (update->whichflag == 1 && utils::strmatch(update->integrate_style, "^respa")) {
-    auto respa = dynamic_cast<Respa *>(update->integrate);
-    if (respa->level_inner >= 0) list_style = NeighConst::REQ_RESPA_INOUT;
-    if (respa->level_middle >= 0) list_style = NeighConst::REQ_RESPA_ALL;
-  }
-  neighbor->add_request(this, list_style);
+  //if (update->whichflag == 1 && utils::strmatch(update->integrate_style, "^respa")) {
+  //  auto respa = dynamic_cast<Respa *>(update->integrate);
+  //  if (respa->level_inner >= 0) list_style = NeighConst::REQ_RESPA_INOUT;
+  //  if (respa->level_middle >= 0) list_style = NeighConst::REQ_RESPA_ALL;
+  //}
+  //neighbor->add_request(this, list_style);
 
   //// set rRESPA cutoffs
 
@@ -275,6 +285,10 @@ double PairCoresoftenedCut::init_one(int i, int j)
     sigma[i][j] = mix_distance(sigma[i][i], sigma[j][j]);
     cut[i][j] = mix_distance(cut[i][i], cut[j][j]);
   }
+
+  epsilon[j][i] = epsilon[i][j];
+  sigma[j][i] = sigma[i][j];
+  cut[j][i] = cut[i][j];
 
   //lj1[i][j] = 48.0 * epsilon[i][j] * pow(sigma[i][j], 12.0);
   //lj2[i][j] = 24.0 * epsilon[i][j] * pow(sigma[i][j], 6.0);
@@ -383,9 +397,9 @@ void PairCoresoftenedCut::write_restart_settings(FILE *fp)
   fwrite(&cut_global, sizeof(double), 1, fp);
   fwrite(&indk, sizeof(double), 1, fp);
   fwrite(&sigma1, sizeof(double), 1, fp);
-  fwrite(&offset_flag, sizeof(int), 1, fp);
+  //fwrite(&offset_flag, sizeof(int), 1, fp);
   fwrite(&mix_flag, sizeof(int), 1, fp);
-  fwrite(&tail_flag, sizeof(int), 1, fp);
+  //fwrite(&tail_flag, sizeof(int), 1, fp);
 }
 
 /* ----------------------------------------------------------------------
@@ -399,16 +413,16 @@ void PairCoresoftenedCut::read_restart_settings(FILE *fp)
     utils::sfread(FLERR, &cut_global, sizeof(double), 1, fp, nullptr, error);
     utils::sfread(FLERR, &indk, sizeof(double), 1, fp, nullptr, error);
     utils::sfread(FLERR, &sigma1, sizeof(double), 1, fp, nullptr, error);
-    utils::sfread(FLERR, &offset_flag, sizeof(int), 1, fp, nullptr, error);
+    //utils::sfread(FLERR, &offset_flag, sizeof(int), 1, fp, nullptr, error);
     utils::sfread(FLERR, &mix_flag, sizeof(int), 1, fp, nullptr, error);
-    utils::sfread(FLERR, &tail_flag, sizeof(int), 1, fp, nullptr, error);
+    //utils::sfread(FLERR, &tail_flag, sizeof(int), 1, fp, nullptr, error);
   }
   MPI_Bcast(&cut_global, 1, MPI_DOUBLE, 0, world);
   MPI_Bcast(&indk, 1, MPI_DOUBLE, 0, world);
   MPI_Bcast(&sigma1, 1, MPI_DOUBLE, 0, world);
-  MPI_Bcast(&offset_flag, 1, MPI_INT, 0, world);
+  //MPI_Bcast(&offset_flag, 1, MPI_INT, 0, world);
   MPI_Bcast(&mix_flag, 1, MPI_INT, 0, world);
-  MPI_Bcast(&tail_flag, 1, MPI_INT, 0, world);
+  //MPI_Bcast(&tail_flag, 1, MPI_INT, 0, world);
 }
 
 /* ----------------------------------------------------------------------
@@ -449,28 +463,6 @@ double PairCoresoftenedCut::single(int /*i*/, int /*j*/, int itype, int jtype, d
   philj = r14inv + 0.5 * (1.0 - thrks);
   return factor_lj * philj;
 }
-
-/* ---------------------------------------------------------------------- */
-
-//void PairCoresoftenedCut::born_matrix(int /*i*/, int /*j*/, int itype, int jtype, double rsq,
-//                            double /*factor_coul*/, double factor_lj, double &dupair,
-//                            double &du2pair)
-//{
-//  double rinv, r2inv, r6inv, du, du2;
-//
-//  r2inv = 1.0 / rsq;
-//  rinv = sqrt(r2inv);
-//  r6inv = r2inv * r2inv * r2inv;
-//
-//  // Reminder: lj1 = 48*e*s^12, lj2 = 24*e*s^6
-//  // so dupair = -forcelj/r = -fforce*r (forcelj from single method)
-//
-//  du = r6inv * rinv * (lj2[itype][jtype] - lj1[itype][jtype] * r6inv);
-//  du2 = r6inv * r2inv * (13 * lj1[itype][jtype] * r6inv - 7 * lj2[itype][jtype]);
-//
-//  dupair = factor_lj * du;
-//  du2pair = factor_lj * du2;
-//}
 
 /* ---------------------------------------------------------------------- */
 
