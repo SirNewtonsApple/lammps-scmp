@@ -1,0 +1,100 @@
+# Setup simulation parameters
+variable T equal 0.1 # Temperature in Kelvin
+variable P equal 1.0 # Pressure in atm
+variable timestep equal 0.001 # Timestep in picoseconds
+variable steps equal 10000 # Number of simulation steps
+
+# Setup the simulation box and initial random configuration
+units           lj
+dimension       3
+atom_style      sphere
+
+# Define the atoms as spheres with a radius of 0.5
+lattice         fcc 1.42
+region          box block 0 2 0 2 0 2
+create_box      1 box
+#create_atoms    1 box
+create_atoms    1 random 32 12345 box
+
+# Set the radius of the particles
+set             type 1 diameter 1.0
+set             type 1 mass 1.0
+
+neighbor        2.0 bin
+
+# Dump initial coordinates
+write_dump            all custom initial_config.lammpstrj id mass x y z radius &
+modify format line "%d %26.16e %26.16e %26.16e %26.16e %26.16e" sort id
+
+
+##########################3
+# Harmonic
+pair_style      soft/harmonic 2.0 0.3
+pair_coeff      1 1 1.0
+pair_modify     mix arithmetic
+
+
+velocity        all set 0.0 0.0 0.0
+
+thermo          1000
+
+min_style       fire
+min_modify      dmax 0.1 norm inf tmax 2.e-1 tmin 2.e-2
+minimize        0.0 1.0e-20 10000000 10000000
+
+write_dump            all custom after_harmonic_config.lammpstrj id mass x y z radius &
+modify format line "%d %26.16e %26.16e %26.16e %26.16e %26.16e" sort id
+
+
+
+## Define the potential
+#pair_style      lj/cut 2.5
+#pair_coeff      1 1 1.0 1.0 2.5
+
+pair_style      ipl/cut/smooth 12 1.25
+pair_coeff      1 1 1.0 
+pair_modify     mix arithmetic
+
+
+# Set initial velocities
+velocity        all set 0.0 0.0 0.0
+#velocity        all create $T 12345 dist gaussian
+
+# Calculate forces
+#run             0
+
+#write_dump            all custom final_config.lammpstrj id mass x y z radius &
+#modify format line "%d %26.16e %26.16e %26.16e %26.16e %26.16e" sort id
+
+# Minimization using FIRE algorithm
+min_style       fire
+#min_modify      dmax 0.01 norm inf tmax 2.e-2 tmin 2.e-3
+min_modify      integrator eulerexplicit tmax 2.e-2 tmin 2.e-3 delaystep 5 &
+                dtgrow 1.1 dtshrink 0.5 alpha0 0.1 alphashrink 0.99 &
+                vdfmax 100000 halfstepback no initialdelay no
+minimize        0.0 1.0e-12 10000000 10000000
+#
+## Dump final coordinates and forces, and print potential energy
+#compute         pe all pe/atom
+#variable        pe_atom equal c_pe
+#variable        total_pe equal c_pe[1]
+#print           "Total potential energy before dump = ${total_pe}"
+#dump            3 all custom 100 final_config.lammpstrj id type x y z fx fy fz c_pe
+#
+## Run the simulation
+#timestep        $timestep
+#run             $steps
+#
+## Minimize using sd algorithm
+#min_style       fire
+#min_modify      dmax 0.01 norm inf tmax 0.001 tmin 0.0001
+#
+#minimize        1.e-6 1.e-6 10000 100000
+
+write_dump            all custom after_ipl_config.lammpstrj id mass x y z radius &
+modify format line "%d %26.16e %26.16e %26.16e %26.16e %26.16e" sort id
+
+# Dump forces
+write_dump            all custom force_only.lammpstrj id fx fy fz &
+modify format line "%5d %26.16e %26.16e %26.16e" sort id
+
