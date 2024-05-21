@@ -15,16 +15,16 @@
    Contributing author: Paul Crozier (SNL)
 ------------------------------------------------------------------------- */
 
-#include "pair_coresoftened_cut.h"
+#include "pair_coresoftened.h"
 
 #include "atom.h"
 #include "comm.h"
 #include "error.h"
 #include "force.h"
-#include "math_const.h"
+#include "math_special.h"
 #include "memory.h"
 #include "neigh_list.h"
-//#include "neighbor.h"
+#include "neighbor.h"
 //#include "respa.h"
 //#include "update.h"
 
@@ -33,7 +33,6 @@
 
 using namespace LAMMPS_NS;
 using MathSpecial::powint;
-//using namespace MathConst;
 
 /* ---------------------------------------------------------------------- */
 
@@ -57,11 +56,6 @@ PairCoresoftenedCut::~PairCoresoftenedCut()
     memory->destroy(cut);
     memory->destroy(epsilon);
     memory->destroy(sigma);
-    //memory->destroy(lj1);
-    //memory->destroy(lj2);
-    //memory->destroy(lj3);
-    //memory->destroy(lj4);
-    //memory->destroy(offset);
   }
 }
 
@@ -71,8 +65,7 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
 {
   int i, j, ii, jj, inum, jnum, itype, jtype;
   double xtmp, ytmp, ztmp, delx, dely, delz, evdwl, fpair;
-  double rsq, r, rk, forcelj, factor_lj;
-  //double rsq, r2inv, r6inv, forcelj, factor_lj;
+  double rsq, r2inv, r6inv, r14inv, rk, thrks, forcelj, factor_lj;
   int *ilist, *jlist, *numneigh, **firstneigh;
 
   evdwl = 0.0;
@@ -114,9 +107,12 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
 
       // V(r) = (sigma/r)^14 + 0.5*(1-tanh(k(r-sigma1)))
       if (rsq < cutsq[itype][jtype]) {
-        r14inv = 1.0 / powint(rsq,7);
-        r      = sqrt(rsq);
-        rk     = r * indk;
+        r2inv  = 1.0 / rsq;
+        r6inv  = r2inv*r2inv*r2inv;
+        r14inv = r6inv*r6inv*r2inv;///////////////////////
+        //r14inv = r2inv*r2inv*r2inv*r2inv*r2inv*r2inv*r2inv;///////////////////////
+        //r14inv = powint(r2inv,7);
+        rk     = sqrt(rsq) * indk;
         thrks  = tanh(rk - ks1); 
 
         forcelj = 14.0 * r14inv + rk / 2.0 * (1.0 - thrks * thrks);
@@ -136,24 +132,6 @@ void PairCoresoftenedCut::compute(int eflag, int vflag)
           evdwl *= factor_lj;
         }
 
-        //r2inv = 1.0 / rsq;
-        //r6inv = r2inv * r2inv * r2inv;
-        //forcelj = r6inv * (lj1[itype][jtype] * r6inv - lj2[itype][jtype]);
-        //fpair = factor_lj * forcelj * r2inv;
-
-        //f[i][0] += delx * fpair;
-        //f[i][1] += dely * fpair;
-        //f[i][2] += delz * fpair;
-        //if (newton_pair || j < nlocal) {
-        //  f[j][0] -= delx * fpair;
-        //  f[j][1] -= dely * fpair;
-        //  f[j][2] -= delz * fpair;
-        //}
-
-        //if (eflag) {
-        //  evdwl = r6inv * (lj3[itype][jtype] * r6inv - lj4[itype][jtype]) - offset[itype][jtype];
-        //  evdwl *= factor_lj;
-        //}
 
         if (evflag) ev_tally(i, j, nlocal, newton_pair, evdwl, 0.0, fpair, delx, dely, delz);
       }
@@ -182,11 +160,6 @@ void PairCoresoftenedCut::allocate()
   memory->create(cut, n, n, "pair:cut");
   memory->create(epsilon, n, n, "pair:epsilon");
   memory->create(sigma, n, n, "pair:sigma");
-  //memory->create(lj1, n, n, "pair:lj1");
-  //memory->create(lj2, n, n, "pair:lj2");
-  //memory->create(lj3, n, n, "pair:lj3");
-  //memory->create(lj4, n, n, "pair:lj4");
-  //memory->create(offset, n, n, "pair:offset");
 }
 
 /* ----------------------------------------------------------------------
@@ -246,33 +219,34 @@ void PairCoresoftenedCut::coeff(int narg, char **arg)
   if (count == 0) error->all(FLERR, "Incorrect args for pair coefficients");
 }
 
-/* ----------------------------------------------------------------------
-   init specific to this pair style
-------------------------------------------------------------------------- */
-
-void PairCoresoftenedCut::init_style()
-{
-  Pair::init_style();
-
-  //// request regular or rRESPA neighbor list
-
-  //int list_style = NeighConst::REQ_DEFAULT;
-
-  //if (update->whichflag == 1 && utils::strmatch(update->integrate_style, "^respa")) {
-  //  auto respa = dynamic_cast<Respa *>(update->integrate);
-  //  if (respa->level_inner >= 0) list_style = NeighConst::REQ_RESPA_INOUT;
-  //  if (respa->level_middle >= 0) list_style = NeighConst::REQ_RESPA_ALL;
-  //}
-  //neighbor->add_request(this, list_style);
-
-  //// set rRESPA cutoffs
-
-  //if (utils::strmatch(update->integrate_style, "^respa") &&
-  //    (dynamic_cast<Respa *>(update->integrate))->level_inner >= 0)
-  //  cut_respa = (dynamic_cast<Respa *>(update->integrate))->cutoff;
-  //else
-  //  cut_respa = nullptr;
-}
+///* ----------------------------------------------------------------------
+//   init specific to this pair style
+//------------------------------------------------------------------------- */
+//
+//void PairCoresoftenedCut::init_style()
+//{
+//  Pair::init_style();
+//
+//  //int list_style = NeighConst::REQ_DEFAULT;//////////////////////////
+//  //// request regular or rRESPA neighbor list
+//
+//  //int list_style = NeighConst::REQ_DEFAULT;
+//
+//  //if (update->whichflag == 1 && utils::strmatch(update->integrate_style, "^respa")) {
+//  //  auto respa = dynamic_cast<Respa *>(update->integrate);
+//  //  if (respa->level_inner >= 0) list_style = NeighConst::REQ_RESPA_INOUT;
+//  //  if (respa->level_middle >= 0) list_style = NeighConst::REQ_RESPA_ALL;
+//  //}
+//  //neighbor->add_request(this, list_style);
+//
+//  //// set rRESPA cutoffs
+//
+//  //if (utils::strmatch(update->integrate_style, "^respa") &&
+//  //    (dynamic_cast<Respa *>(update->integrate))->level_inner >= 0)
+//  //  cut_respa = (dynamic_cast<Respa *>(update->integrate))->cutoff;
+//  //else
+//  //  cut_respa = nullptr;
+//}
 
 /* ----------------------------------------------------------------------
    init for one type pair i,j and corresponding j,i
@@ -395,8 +369,8 @@ void PairCoresoftenedCut::read_restart(FILE *fp)
 void PairCoresoftenedCut::write_restart_settings(FILE *fp)
 {
   fwrite(&cut_global, sizeof(double), 1, fp);
-  fwrite(&indk, sizeof(double), 1, fp);
   fwrite(&sigma1, sizeof(double), 1, fp);
+  fwrite(&indk, sizeof(double), 1, fp);
   //fwrite(&offset_flag, sizeof(int), 1, fp);
   fwrite(&mix_flag, sizeof(int), 1, fp);
   //fwrite(&tail_flag, sizeof(int), 1, fp);
@@ -411,18 +385,21 @@ void PairCoresoftenedCut::read_restart_settings(FILE *fp)
   int me = comm->me;
   if (me == 0) {
     utils::sfread(FLERR, &cut_global, sizeof(double), 1, fp, nullptr, error);
-    utils::sfread(FLERR, &indk, sizeof(double), 1, fp, nullptr, error);
     utils::sfread(FLERR, &sigma1, sizeof(double), 1, fp, nullptr, error);
+    utils::sfread(FLERR, &indk, sizeof(double), 1, fp, nullptr, error);
     //utils::sfread(FLERR, &offset_flag, sizeof(int), 1, fp, nullptr, error);
     utils::sfread(FLERR, &mix_flag, sizeof(int), 1, fp, nullptr, error);
     //utils::sfread(FLERR, &tail_flag, sizeof(int), 1, fp, nullptr, error);
+
+    ks1 = indk * sigma1;
   }
   MPI_Bcast(&cut_global, 1, MPI_DOUBLE, 0, world);
-  MPI_Bcast(&indk, 1, MPI_DOUBLE, 0, world);
   MPI_Bcast(&sigma1, 1, MPI_DOUBLE, 0, world);
+  MPI_Bcast(&indk, 1, MPI_DOUBLE, 0, world);
   //MPI_Bcast(&offset_flag, 1, MPI_INT, 0, world);
   MPI_Bcast(&mix_flag, 1, MPI_INT, 0, world);
   //MPI_Bcast(&tail_flag, 1, MPI_INT, 0, world);
+  MPI_Bcast(&ks1, 1, MPI_DOUBLE, 0, world);
 }
 
 /* ----------------------------------------------------------------------
@@ -450,14 +427,20 @@ void PairCoresoftenedCut::write_data_all(FILE *fp)
 double PairCoresoftenedCut::single(int /*i*/, int /*j*/, int itype, int jtype, double rsq,
                          double /*factor_coul*/, double factor_lj, double &fforce)
 {
-  double r14inv, r, rk, thrks, forcelj, philj;
+  double r2inv, r6inv, r14inv, rk, thrks, forcelj, philj;
 
-  r14inv = 1.0 / powint(rsq,7);
-  r      = sqrt(rsq);
-  rk     = r * indk;
+  r2inv  = 1.0/rsq;
+  r6inv  = r2inv*r2inv*r2inv;
+  r14inv = r6inv*r6inv*r2inv;
+
+  //r14inv = powint(r2inv,7);
+  //r      = sqrt(rsq);
+  //rk     = r * indk;
+  rk       = sqrt(rsq) * indk;
   thrks  = tanh(rk - ks1); 
 
   forcelj = 14.0 * r14inv + rk / 2.0 * (1.0 - thrks * thrks);
+  //fforce = forcelj * r2inv;//////////////////////////////////
   fforce = factor_lj * forcelj * r2inv;
 
   philj = r14inv + 0.5 * (1.0 - thrks);
